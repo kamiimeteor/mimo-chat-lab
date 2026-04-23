@@ -74,6 +74,7 @@ type SpeakResponse = ChatResponse & {
 };
 
 const defaultPrompt = "";
+const TTS_MODEL_LABEL = "mimo-v2.5-tts";
 const CHAT_MODEL_OPTIONS: Array<{ label: string; value: ChatModelChoice }> = [
   { label: "MiMo-V2.5", value: "mimo-v2.5" },
   { label: "MiMo-V2.5-Pro", value: "mimo-v2.5-pro" }
@@ -145,7 +146,7 @@ function App() {
   const [chatAttachments, setChatAttachments] = useState<Attachment[]>([]);
   const [speakAttachments, setSpeakAttachments] = useState<Attachment[]>([]);
   const [selectedChatModel, setSelectedChatModel] = useState<ChatModelChoice>("mimo-v2.5");
-  const [selectedVoice, setSelectedVoice] = useState<VoiceOption>("default_zh");
+  const [selectedVoice, setSelectedVoice] = useState<VoiceOption>("mimo_default");
   const [presetStyle, setPresetStyle] = useState("");
   const [customStyle, setCustomStyle] = useState("");
   const [loadingTab, setLoadingTab] = useState<ChatTab | null>(null);
@@ -164,17 +165,11 @@ function App() {
     () => chatMessages.some((message) => message.role === "user" && (message.attachments?.length ?? 0) > 0),
     [chatMessages]
   );
-  const speakHistoryHasMedia = useMemo(
-    () => speakMessages.some((message) => message.role === "user" && (message.attachments?.length ?? 0) > 0),
-    [speakMessages]
-  );
   const effectiveChatModel: ModelUsed =
     selectedChatModel === "mimo-v2.5-pro" && (chatAttachments.length > 0 || chatHistoryHasMedia)
       ? "mimo-v2.5"
       : selectedChatModel;
-  const effectiveSpeakModel: ModelUsed =
-    speakAttachments.length > 0 || speakHistoryHasMedia ? "mimo-v2-omni" : "mimo-v2-pro";
-  const currentModelLabel = activeTab === "chat" ? effectiveChatModel : effectiveSpeakModel;
+  const activePrimaryModelLabel = activeTab === "chat" ? effectiveChatModel : TTS_MODEL_LABEL;
   const canSubmit = (activeInput.trim().length > 0 || activeAttachments.length > 0) && !isLoading;
 
   const speakHelperText = useMemo(() => {
@@ -379,10 +374,6 @@ function App() {
   }
 
   const activeAttachmentAccept = activeTab === "chat" ? CHAT_ATTACHMENT_ACCEPT : ATTACHMENT_ACCEPT;
-  const activeTabDescription =
-    activeTab === "chat"
-      ? "默认模式：发送文字、图片、视频，只返回文字结果。你可以手动选 MiMo-V2.5 或 MiMo-V2.5-Pro；带图片或视频时会自动使用 MiMo-V2.5。"
-      : "语音聊天模式：保留原来的文字回复 + 语音合成 + 自动播放能力，也支持上传音频继续分析。";
   const loadingText =
     activeTab === "chat" ? "正在调用模型，请稍候…" : "正在调用模型并生成语音，请稍候…";
 
@@ -392,7 +383,7 @@ function App() {
         <div className="space-y-5">
           <div className="flex flex-wrap items-center gap-3">
             <Badge variant="accent" className="rounded-full px-3 py-1 text-[11px] tracking-[0.24em] uppercase">
-              MiMo Localhost MVP
+              Powered by the Latest MiMo Models
             </Badge>
             <Badge variant="secondary" className="gap-1.5 rounded-full px-3 py-1">
               <Sparkles className="size-3.5" />
@@ -409,12 +400,8 @@ function App() {
           </div>
 
           <div className="space-y-4">
-            <h1 className="max-w-3xl text-5xl font-semibold tracking-tight text-balance sm:text-6xl">
-              先回答，再决定要不要开口说话
-            </h1>
-            <p className="max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg">
-              默认 tab 现在适合直接发文字、图片、视频来聊天；如果你希望保留自动语音回复和播放，切到“语音聊天”
-              tab 就可以继续使用原来的体验。
+            <p className="w-full text-base leading-7 text-muted-foreground sm:text-lg">
+              默认聊天适合直接发文字、图片、视频；自动文字+语音回复和播放，请切到“语音聊天”
             </p>
           </div>
         </div>
@@ -463,8 +450,6 @@ function App() {
                     语音聊天
                   </button>
                 </div>
-
-                <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{activeTabDescription}</p>
               </div>
 
               <Badge variant="outline" className="rounded-full px-3 py-1">
@@ -476,96 +461,96 @@ function App() {
           <CardContent className="space-y-0 p-0">
             <ScrollArea className="h-[520px] px-6">
               <div className="space-y-4">
-                {activeMessages.length === 0 ? (
-                  <div className="mt-1 rounded-3xl border border-dashed bg-background/60 px-6 py-10 text-center">
-                    <p className="font-medium">还没有消息</p>
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      {activeTab === "chat"
-                        ? "你可以直接发文字、图片或视频。默认 tab 不会自动生成语音。"
-                        : "你可以继续使用原来的语音回复流程，也可以上传图片、视频或音频一起分析。"}
-                    </p>
-                  </div>
-                ) : (
-                  activeMessages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={
-                        message.role === "user"
-                          ? "ml-auto max-w-[92%] rounded-[28px] border border-primary/10 bg-secondary/80 p-5 shadow-sm"
-                          : "mr-auto max-w-[92%] rounded-[28px] border border-primary/12 bg-gradient-to-br from-background to-accent/40 p-5 shadow-sm"
-                      }
-                    >
-                      <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <Badge variant={message.role === "user" ? "secondary" : "accent"} className="gap-1.5 rounded-full px-3 py-1">
-                          {message.role === "user" ? <UserRound className="size-3.5" /> : <Bot className="size-3.5" />}
-                          {message.role === "user" ? "你" : "MiMo"}
-                        </Badge>
-                        {message.modelUsed ? (
-                          <Badge variant="outline" className="rounded-full px-3 py-1">
-                            {message.modelUsed}
-                          </Badge>
-                        ) : null}
-                        {message.role === "assistant" && message.appliedStyle ? (
-                          <Badge variant="outline" className="rounded-full px-3 py-1">
-                            Style: {message.appliedStyle}
-                          </Badge>
-                        ) : null}
-                      </div>
+                {activeMessages.map((message) => (
+                    (() => {
+                      const isVoiceAssistantMessage = message.role === "assistant" && Boolean(message.audioSrc);
 
-                      {message.content ? (
-                        <p className="whitespace-pre-wrap text-[15px] leading-7 text-foreground">{message.content}</p>
-                      ) : (
-                        <p className="text-[15px] leading-7 text-muted-foreground">
-                          本条消息未填写文字，模型已基于附件自动分析。
-                        </p>
-                      )}
-
-                      {message.attachments && message.attachments.length > 0 ? (
-                        <div className="mt-4 space-y-3">
-                          <div className="flex flex-wrap gap-2">
-                            {message.attachments.map((attachment) => {
-                              const Icon = attachmentIcon(attachment.kind);
-                              return (
-                                <Badge key={attachment.id} variant="outline" className="gap-1.5 rounded-full px-3 py-1">
-                                  <Icon className="size-3.5" />
-                                  {attachmentLabel(attachment.kind)}: {attachment.name}
-                                </Badge>
-                              );
-                            })}
+                      return (
+                        <div
+                          key={message.id}
+                          className={
+                            message.role === "user"
+                              ? "ml-auto max-w-[92%] rounded-[28px] border border-primary/10 bg-secondary/80 p-5 shadow-sm"
+                              : "mr-auto max-w-[92%] rounded-[28px] border border-primary/12 bg-gradient-to-br from-background to-accent/40 p-5 shadow-sm"
+                          }
+                        >
+                          <div className="mb-3 flex flex-wrap items-center gap-2">
+                            <Badge variant={message.role === "user" ? "secondary" : "accent"} className="gap-1.5 rounded-full px-3 py-1">
+                              {message.role === "user" ? <UserRound className="size-3.5" /> : <Bot className="size-3.5" />}
+                              {message.role === "user" ? "你" : "MiMo"}
+                            </Badge>
+                            {message.modelUsed && !isVoiceAssistantMessage ? (
+                              <Badge variant="outline" className="rounded-full px-3 py-1">
+                                {message.modelUsed}
+                              </Badge>
+                            ) : null}
+                            {isVoiceAssistantMessage ? (
+                              <Badge variant="outline" className="rounded-full px-3 py-1">
+                                {TTS_MODEL_LABEL}
+                              </Badge>
+                            ) : null}
+                            {message.role === "assistant" && message.appliedStyle ? (
+                              <Badge variant="outline" className="rounded-full px-3 py-1">
+                                Style: {message.appliedStyle}
+                              </Badge>
+                            ) : null}
                           </div>
 
-                          {message.attachments.some((attachment) => attachment.kind === "image") ? (
-                            <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                              {message.attachments
-                                .filter((attachment) => attachment.kind === "image")
-                                .map((attachment) => (
-                                  <div key={attachment.id} className="overflow-hidden rounded-2xl border bg-background/80">
-                                    <img src={attachment.dataUrl} alt={attachment.name} className="h-28 w-full object-cover" />
-                                    <div className="px-3 py-2 text-xs text-muted-foreground">{attachment.name}</div>
-                                  </div>
-                                ))}
+                          {message.content ? (
+                            <p className="whitespace-pre-wrap text-[15px] leading-7 text-foreground">{message.content}</p>
+                          ) : (
+                            <p className="text-[15px] leading-7 text-muted-foreground">
+                              本条消息未填写文字，模型已基于附件自动分析。
+                            </p>
+                          )}
+
+                          {message.attachments && message.attachments.length > 0 ? (
+                            <div className="mt-4 space-y-3">
+                              <div className="flex flex-wrap gap-2">
+                                {message.attachments.map((attachment) => {
+                                  const Icon = attachmentIcon(attachment.kind);
+                                  return (
+                                    <Badge key={attachment.id} variant="outline" className="gap-1.5 rounded-full px-3 py-1">
+                                      <Icon className="size-3.5" />
+                                      {attachmentLabel(attachment.kind)}: {attachment.name}
+                                    </Badge>
+                                  );
+                                })}
+                              </div>
+
+                              {message.attachments.some((attachment) => attachment.kind === "image") ? (
+                                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                                  {message.attachments
+                                    .filter((attachment) => attachment.kind === "image")
+                                    .map((attachment) => (
+                                      <div key={attachment.id} className="overflow-hidden rounded-2xl border bg-background/80">
+                                        <img src={attachment.dataUrl} alt={attachment.name} className="h-28 w-full object-cover" />
+                                        <div className="px-3 py-2 text-xs text-muted-foreground">{attachment.name}</div>
+                                      </div>
+                                    ))}
+                                </div>
+                              ) : null}
                             </div>
                           ) : null}
-                        </div>
-                      ) : null}
 
-                      {message.audioSrc ? (
-                        <>
-                          <Separator className="my-4" />
-                          <div className="rounded-2xl bg-background/80 p-3">
-                            <div className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                              <Volume2 className="size-4 text-primary" />
-                              音频回放
-                            </div>
-                            <audio controls autoPlay preload="auto" src={message.audioSrc} className="w-full">
-                              你的浏览器不支持音频播放。
-                            </audio>
-                          </div>
-                        </>
-                      ) : null}
-                    </div>
-                  ))
-                )}
+                          {message.audioSrc ? (
+                            <>
+                              <Separator className="my-4" />
+                              <div className="rounded-2xl bg-background/80 p-3">
+                                <div className="mb-2 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                                  <Volume2 className="size-4 text-primary" />
+                                  音频回放
+                                </div>
+                                <audio controls autoPlay preload="auto" src={message.audioSrc} className="w-full">
+                                  你的浏览器不支持音频播放。
+                                </audio>
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                      );
+                    })()
+                  ))}
 
                 {isActiveTabLoading ? (
                   <div className="mr-auto max-w-[92%] rounded-[28px] border border-primary/12 bg-background/80 p-5 shadow-sm">
@@ -575,7 +560,7 @@ function App() {
                         MiMo
                       </Badge>
                       <Badge variant="outline" className="rounded-full px-3 py-1">
-                        {currentModelLabel}
+                        {activeTab === "chat" ? effectiveChatModel : TTS_MODEL_LABEL}
                       </Badge>
                       <span className="text-sm text-muted-foreground">
                         {activeTab === "chat" ? "正在生成文字回复" : "正在生成语音回复"}
@@ -795,14 +780,14 @@ function App() {
                 <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                   <span>当前模型：</span>
                   <Badge variant="outline" className="rounded-full px-3 py-1">
-                    {currentModelLabel}
+                    {activePrimaryModelLabel}
                   </Badge>
                   <span>
                     {activeTab === "chat"
                       ? selectedChatModel === "mimo-v2.5-pro" && effectiveChatModel !== selectedChatModel
                         ? "你当前选择了 MiMo-V2.5-Pro，但由于会话里包含图片或视频，实际会自动使用 MiMo-V2.5。"
                         : "当前 tab 只返回文字，支持图片和视频。"
-                      : "当前 tab 会返回文字并生成语音，支持图片、音频、视频。"}
+                      : "当前 tab 会先生成文字回复，再用 MiMo-V2.5-TTS 合成语音并自动播放；支持图片、音频、视频，也支持上传音频继续分析。"}
                   </span>
                 </div>
 
@@ -813,9 +798,13 @@ function App() {
                 ) : null}
 
                 {activeTab === "speak" ? (
-                  <p className="text-sm leading-6 text-muted-foreground">
-                    官方 style 为推荐示例，MiMo 也支持未列出的自然语言风格描述。{speakHelperText}
-                  </p>
+                  <div className="space-y-1 text-sm leading-6 text-muted-foreground">
+                    <p>
+                      语音合成模型：<code>mimo-v2.5-tts</code>。MiMo-V2.5-TTS 支持内置高质量音色、自然语言风格控制、
+                      情绪/语速/方言等表达控制，也支持在文本中使用音频标签。
+                    </p>
+                    <p>上方 style 可作为语音导演提示使用；未列出的自然语言风格描述同样可以尝试。{speakHelperText}</p>
+                  </div>
                 ) : (
                   <p className="text-sm leading-6 text-muted-foreground">
                     默认 tab 现在支持手动选择 <code>MiMo-V2.5</code> 和 <code>MiMo-V2.5-Pro</code>，默认是{" "}

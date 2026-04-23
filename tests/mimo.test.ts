@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildTtsContent,
   buildUserContent,
   getEffectiveUserPrompt,
   resolveAppliedStyle,
-  selectTextModel
+  selectTextModel,
+  generateChatReply
 } from "../server/mimo";
 
 const imageAttachment = {
@@ -30,7 +31,7 @@ describe("resolveAppliedStyle", () => {
 
 describe("buildTtsContent", () => {
   it("adds a style tag for singing mode", () => {
-    expect(buildTtsContent("月亮代表我的心", "唱歌")).toBe("<style>唱歌</style>月亮代表我的心");
+    expect(buildTtsContent("月亮代表我的心", "唱歌")).toBe("(唱歌)月亮代表我的心");
   });
 
   it("does not add a style tag when style is missing", () => {
@@ -72,5 +73,29 @@ describe("multimodal helpers", () => {
 
   it("provides a default prompt for attachment-only messages", () => {
     expect(getEffectiveUserPrompt("", [imageAttachment])).toBe("请分析我上传的内容，并提炼其中最重要的信息。");
+  });
+});
+
+describe("speech mode prompting", () => {
+  it("uses a voice-chat-specific developer prompt when generating speech replies", async () => {
+    const fetchFn = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: "明月几时有，把酒问青天。"
+            }
+          }
+        ]
+      })
+    });
+
+    await generateChatReply("test-key", [], "请帮我朗读这句诗", [], fetchFn as typeof fetch, undefined, "speech");
+
+    const requestBody = JSON.parse(String(fetchFn.mock.calls[0]?.[1]?.body));
+    expect(requestBody.messages[0].content).toContain("voice chat mode");
+    expect(requestBody.messages[0].content).toContain("Never say that you cannot speak");
+    expect(requestBody.messages[0].content).toContain("return only the text/script that should be spoken");
   });
 });

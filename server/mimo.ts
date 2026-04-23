@@ -9,9 +9,21 @@ export const AUDIO_MIME_TYPE = "audio/wav";
 export const MAX_BASE64_MEDIA_BYTES = 10 * 1024 * 1024;
 
 export type AttachmentKind = "image" | "audio" | "video";
-export type VoiceOption = "mimo_default" | "default_en" | "default_zh";
+export type VoiceOption =
+  | "mimo_default"
+  | "冰糖"
+  | "茉莉"
+  | "苏打"
+  | "白桦"
+  | "Mia"
+  | "Chloe"
+  | "Milo"
+  | "Dean"
+  | "default_en"
+  | "default_zh";
 export type TextModelPreference = typeof CHAT_MODEL_V25 | typeof CHAT_MODEL_V25_PRO;
 export type TextModel = typeof CHAT_MODEL | typeof OMNI_MODEL | TextModelPreference;
+export type ChatOutputMode = "text" | "speech";
 
 export type MediaAttachment = {
   kind: AttachmentKind;
@@ -82,7 +94,19 @@ export function buildTtsContent(replyText: string, appliedStyle: string | null):
     return replyText;
   }
 
-  return `<style>${appliedStyle}</style>${replyText}`;
+  return `(${appliedStyle})${replyText}`;
+}
+
+export function normalizeVoiceOption(voice: VoiceOption): Exclude<VoiceOption, "default_en" | "default_zh"> {
+  if (voice === "default_zh") {
+    return "冰糖";
+  }
+
+  if (voice === "default_en") {
+    return "Mia";
+  }
+
+  return voice;
 }
 
 export function getDefaultAttachmentPrompt(): string {
@@ -174,7 +198,7 @@ function formatHistoryMessage(message: HistoryMessage) {
   };
 }
 
-function buildDeveloperPrompt() {
+function buildDeveloperPrompt(outputMode: ChatOutputMode = "text") {
   const today = new Intl.DateTimeFormat("en-GB", {
     weekday: "long",
     year: "numeric",
@@ -182,14 +206,25 @@ function buildDeveloperPrompt() {
     day: "numeric"
   }).format(new Date());
 
-  return [
+  const prompt = [
     "You are MiMo, an AI assistant developed by Xiaomi.",
     `Today's date is ${today}.`,
     "Your knowledge cutoff date is December 2024.",
     "Reply in the same language as the user unless they ask for another language.",
     "If the user uploads image, audio, or video, ground your answer in the provided media.",
     "Keep answers helpful, natural, and concise enough to sound good when spoken aloud."
-  ].join(" ");
+  ];
+
+  if (outputMode === "speech") {
+    prompt.push(
+      "This request is in voice chat mode: the app will synthesize your final answer with MiMo-V2.5-TTS and play it aloud.",
+      "Never say that you cannot speak, read aloud, make sound, or produce audio; the app handles audio generation.",
+      "If the user asks you to read, recite, narrate, 朗读, 念, or 读出来 provided text, return only the text/script that should be spoken, preserving the user's wording, punctuation, and line breaks as much as possible.",
+      "Do not add meta commentary such as '好的，我来朗读' unless the user explicitly asks for an introduction."
+    );
+  }
+
+  return prompt.join(" ");
 }
 
 function extractTextContent(content: ChatMessageContent): string {
@@ -243,7 +278,8 @@ export async function generateChatReply(
   message: string,
   attachments: MediaAttachment[] = [],
   fetchFn: FetchLike = fetch,
-  preferredModel?: TextModelPreference
+  preferredModel?: TextModelPreference,
+  outputMode: ChatOutputMode = "text"
 ): Promise<{ replyText: string; modelUsed: TextModel }> {
   const modelUsed = selectTextModel(history, attachments, preferredModel);
   const payload = await callMimoApi(
@@ -253,7 +289,7 @@ export async function generateChatReply(
       messages: [
         {
           role: "developer",
-          content: buildDeveloperPrompt()
+          content: buildDeveloperPrompt(outputMode)
         },
         ...history.map((entry) => formatHistoryMessage(entry)),
         {
@@ -303,7 +339,7 @@ export async function generateSpeechAudio(
       ],
       audio: {
         format: "wav",
-        voice
+        voice: normalizeVoiceOption(voice)
       }
     },
     fetchFn

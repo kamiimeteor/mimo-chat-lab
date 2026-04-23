@@ -194,7 +194,7 @@ describe("/api/chat-speak", () => {
     const response = await request(app).post("/api/chat-speak").send({
       message: "帮我设计一个语音网页",
       history: [],
-      voice: "default_zh",
+      voice: "冰糖",
       presetStyle: "Happy",
       customStyle: "soft and warm"
     });
@@ -208,8 +208,52 @@ describe("/api/chat-speak", () => {
       modelUsed: "mimo-v2-pro"
     });
     expect(fetchFn).toHaveBeenCalledTimes(2);
+    const firstRequest = fetchFn.mock.calls[0];
+    expect(firstRequest?.[1]?.body).toContain("voice chat mode");
+    expect(firstRequest?.[1]?.body).toContain("Never say that you cannot speak");
     const secondRequest = fetchFn.mock.calls[1];
     expect(secondRequest?.[1]?.body).toContain("\"model\":\"mimo-v2.5-tts\"");
+    expect(secondRequest?.[1]?.body).toContain("\"voice\":\"冰糖\"");
+  });
+
+  it("maps the old default_zh voice to the MiMo-V2.5-TTS Bingtang voice", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          choices: [
+            {
+              message: {
+                content: "可以，我会用新版音色朗读。"
+              }
+            }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          choices: [
+            {
+              message: {
+                audio: {
+                  data: "YmluZ3Rhbmc="
+                }
+              }
+            }
+          ]
+        })
+      );
+
+    const app = createApp({ apiKey: "test-key", fetchFn });
+    const response = await request(app).post("/api/chat-speak").send({
+      message: "用旧音色 ID 试一下",
+      history: [],
+      voice: "default_zh"
+    });
+
+    expect(response.status).toBe(200);
+    const secondRequest = fetchFn.mock.calls[1];
+    expect(secondRequest?.[1]?.body).toContain("\"voice\":\"冰糖\"");
   });
 
   it("switches to omni when media attachments are present", async () => {
@@ -252,7 +296,7 @@ describe("/api/chat-speak", () => {
         }
       ],
       history: [],
-      voice: "default_zh"
+      voice: "冰糖"
     });
 
     expect(response.status).toBe(200);

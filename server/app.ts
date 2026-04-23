@@ -30,7 +30,19 @@ type ChatSpeakBody = {
   skipTts?: boolean;
 };
 
-const VALID_VOICES: VoiceOption[] = ["mimo_default", "default_en", "default_zh"];
+const VALID_VOICES: VoiceOption[] = [
+  "mimo_default",
+  "冰糖",
+  "茉莉",
+  "苏打",
+  "白桦",
+  "Mia",
+  "Chloe",
+  "Milo",
+  "Dean",
+  "default_en",
+  "default_zh"
+];
 const VALID_ATTACHMENT_KINDS: AttachmentKind[] = ["image", "audio", "video"];
 const VALID_TEXT_MODELS: TextModelPreference[] = ["mimo-v2.5", "mimo-v2.5-pro"];
 type ParsedChatRequest = {
@@ -150,7 +162,7 @@ function parseChatRequest(body: ChatSpeakBody | undefined): ParsedChatRequestRes
     history = [],
     attachments: currentAttachmentsInput,
     textModel,
-    voice = "default_zh",
+    voice = "mimo_default",
     presetStyle,
     customStyle
   } = body ?? {};
@@ -360,7 +372,8 @@ export function createApp({
           message,
           normalizedCurrentAttachments,
           fetchFn,
-          preferredTextModel
+          preferredTextModel,
+          skipTts ? "text" : "speech"
         );
 
         if (skipTts) {
