@@ -89,6 +89,83 @@ http://localhost:5173
 - `pnpm test` runs unit and API tests
 - `pnpm build` builds the client and compiles the server
 - `pnpm start` runs the compiled server
+- `pnpm electron` builds the web app/server and opens the Electron desktop app locally
+- `pnpm build:mac` builds a macOS `.dmg` with Electron Builder
+- `pnpm build:mac:unsigned` builds a local unsigned `.dmg` when you do not have Apple signing credentials configured
+- `pnpm build:mac:universal` builds a universal `.dmg` for Apple Silicon and Intel Macs
+
+## macOS DMG Packaging
+
+The desktop build uses Electron as a wrapper around the compiled Vite client and Express server:
+
+```text
+Electron window
+  -> http://127.0.0.1:<random-local-port>
+Embedded Express server
+  -> dist static client
+  -> /api/*
+  -> Xiaomi MiMo API
+```
+
+Build a DMG:
+
+```bash
+pnpm build:mac
+```
+
+The generated installer is written to `release/`.
+
+For a local-only installer without Apple signing credentials:
+
+```bash
+pnpm build:mac:unsigned
+```
+
+### Configuring MIMO_API_KEY in the Installed App
+
+The desktop app does not bundle your local `.env` file. On first launch, it opens an in-app API key dialog. If you skip it, chat requests will show an in-app "unable to reply" state with a button to reopen the API key dialog.
+
+After saving the key, the app prompts you to restart and provides a `Restart App` button. The restart loads the saved key into the embedded local server.
+
+The same key is stored locally at:
+
+```text
+~/Library/Application Support/Mimo Chat Lab/config.json
+```
+
+Set the key there:
+
+```json
+{
+  "MIMO_API_KEY": "your_key_here"
+}
+```
+
+You can also open the config file from `App > Open API Key Config`, then restart the app or choose `App > Reload API Key`.
+
+### Apple Signing and Notarization
+
+For distribution outside your own machine, use a Developer ID certificate and Apple notarization. `electron-builder` will attempt signing automatically when it can find a valid `Developer ID Application` certificate in your keychain.
+
+For notarization, set one of the supported credential groups before running `pnpm build:mac`. The recommended option is App Store Connect API key credentials:
+
+```bash
+export APPLE_API_KEY=/absolute/path/to/AuthKey_XXXXXXXXXX.p8
+export APPLE_API_KEY_ID=XXXXXXXXXX
+export APPLE_API_ISSUER=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+pnpm build:mac
+```
+
+Alternative Apple ID credentials are also supported:
+
+```bash
+export APPLE_ID=you@example.com
+export APPLE_APP_SPECIFIC_PASSWORD=xxxx-xxxx-xxxx-xxxx
+export APPLE_TEAM_ID=XXXXXXXXXX
+pnpm build:mac
+```
+
+The macOS hardened runtime and Electron entitlements are configured in `build/entitlements.mac.plist` and `build/entitlements.mac.inherit.plist`.
 
 ## Local Architecture
 

@@ -1,11 +1,15 @@
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   AudioLines,
   Bot,
+  CheckCircle2,
   Film,
   ImageIcon,
+  KeyRound,
   LoaderCircle,
   Plus,
+  RotateCcw,
   SendHorizonal,
   Sparkles,
   Trash2,
@@ -60,6 +64,7 @@ type Message = {
   audioSrc?: string;
   appliedStyle?: string | null;
   modelUsed?: ModelUsed;
+  isError?: boolean;
 };
 
 type ChatResponse = {
@@ -71,6 +76,18 @@ type SpeakResponse = ChatResponse & {
   audioBase64: string;
   audioMimeType: "audio/wav";
   appliedStyle: string | null;
+};
+
+type ApiErrorPayload = {
+  error?: {
+    code?: string;
+    message?: string;
+  };
+};
+
+type DesktopConfigStatus = {
+  enabled: boolean;
+  hasApiKey: boolean;
 };
 
 const defaultPrompt = "";
@@ -151,6 +168,16 @@ function App() {
   const [customStyle, setCustomStyle] = useState("");
   const [loadingTab, setLoadingTab] = useState<ChatTab | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [desktopConfig, setDesktopConfig] = useState<DesktopConfigStatus>({
+    enabled: false,
+    hasApiKey: true
+  });
+  const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [apiKeySaveError, setApiKeySaveError] = useState<string | null>(null);
+  const [apiKeyRestartRequired, setApiKeyRestartRequired] = useState(false);
+  const [isSavingApiKey, setIsSavingApiKey] = useState(false);
+  const [isRestartingApp, setIsRestartingApp] = useState(false);
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
   const chatFileInputRef = useRef<HTMLInputElement | null>(null);
   const speakFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -171,6 +198,10 @@ function App() {
       : selectedChatModel;
   const activePrimaryModelLabel = activeTab === "chat" ? effectiveChatModel : TTS_MODEL_LABEL;
   const canSubmit = (activeInput.trim().length > 0 || activeAttachments.length > 0) && !isLoading;
+  const shouldShowApiKeyBanner = desktopConfig.enabled && (!desktopConfig.hasApiKey || apiKeyRestartRequired);
+  const apiKeyUnavailableMessage = apiKeyRestartRequired
+    ? "无法回复：API Key 已保存，但当前 App 还没有重启加载新配置。请重启 App 后再发送。"
+    : "无法回复：还没有配置 MIMO_API_KEY。请先填写 API Key，保存后重启 App。";
 
   const speakHelperText = useMemo(() => {
     if (customStyle.trim()) {
@@ -187,6 +218,132 @@ function App() {
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [activeMessages, isActiveTabLoading]);
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    async function loadDesktopConfig() {
+      try {
+        const response = await fetch("/api/desktop-config");
+        if (!response.ok) {
+          return;
+        }
+
+        const status = (await response.json()) as DesktopConfigStatus;
+        if (!isCurrent) {
+          return;
+        }
+
+        const normalizedStatus = {
+          enabled: Boolean(status.enabled),
+          hasApiKey: Boolean(status.hasApiKey)
+        };
+        setDesktopConfig(normalizedStatus);
+
+        if (normalizedStatus.enabled && !normalizedStatus.hasApiKey) {
+          setApiKeyDialogOpen(true);
+        }
+      } catch {
+        // Desktop config is an Electron-only helper; the web dev server can ignore it.
+      }
+    }
+
+    void loadDesktopConfig();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, []);
+
+  function appendAssistantMessage(tab: ChatTab, message: Message) {
+    if (tab === "chat") {
+      setChatMessages((current) => [...current, message]);
+      return;
+    }
+
+    setSpeakMessages((current) => [...current, message]);
+  }
+
+  function openApiKeyDialog() {
+    setApiKeySaveError(null);
+    setApiKeyDialogOpen(true);
+  }
+
+  async function handleSaveApiKey(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextApiKey = apiKeyInput.trim();
+
+    if (!nextApiKey) {
+      setApiKeySaveError("请输入 MIMO_API_KEY。");
+      return;
+    }
+
+    setIsSavingApiKey(true);
+    setApiKeySaveError(null);
+
+    try {
+      const response = await fetch("/api/desktop-config/api-key", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ apiKey: nextApiKey })
+      });
+      const payload = (await response.json()) as { hasApiKey?: boolean; restartRequired?: boolean } & ApiErrorPayload;
+
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "保存 API Key 失败。");
+      }
+
+      setDesktopConfig((current) => ({
+        ...current,
+        hasApiKey: Boolean(payload.hasApiKey)
+      }));
+      setApiKeyRestartRequired(Boolean(payload.restartRequired));
+      setApiKeyInput("");
+      setError(null);
+    } catch (caughtError) {
+      const message = caughtError instanceof Error ? caughtError.message : "保存 API Key 时发生未知错误。";
+      setApiKeySaveError(message);
+    } finally {
+      setIsSavingApiKey(false);
+    }
+  }
+
+  async function handleRestartApp() {
+    setIsRestartingApp(true);
+    setApiKeySaveError(null);
+
+    try {
+      const response = await fetch("/api/desktop-config/restart", {
+        method: "POST"
+      });
+      const payload = (await response.json()) as ApiErrorPayload;
+
+      if (!response.ok) {
+        throw new Error(payload.error?.message ?? "无法重启 App，请手动退出后重新打开。");
+      }
+    } catch (caughtError) {
+      const message = caughtError instanceof Error ? caughtError.message : "无法重启 App，请手动退出后重新打开。";
+      setApiKeySaveError(message);
+      setIsRestartingApp(false);
+    }
+  }
+
+  function handleMissingApiKeyResponse(tab: ChatTab) {
+    setDesktopConfig((current) => ({
+      ...current,
+      hasApiKey: apiKeyRestartRequired ? current.hasApiKey : false
+    }));
+    appendAssistantMessage(tab, {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: apiKeyUnavailableMessage,
+      isError: true
+    });
+    setApiKeySaveError(null);
+    setApiKeyDialogOpen(true);
+  }
 
   async function handleAttachmentChange(event: ChangeEvent<HTMLInputElement>) {
     const fileList = event.target.files;
@@ -329,12 +486,17 @@ function App() {
         })
       });
 
-      const payload = (await response.json()) as
-        | (ChatResponse & { error?: { message?: string } })
-        | (SpeakResponse & { error?: { message?: string } });
+      const payload = (await response.json()) as ChatResponse | SpeakResponse | ApiErrorPayload;
 
       if (!response.ok || !("replyText" in payload)) {
-        throw new Error(payload.error?.message ?? "请求 MiMo 接口失败，请稍后再试。");
+        const apiError = "error" in payload ? payload.error : undefined;
+
+        if (apiError?.code === "CONFIG_ERROR") {
+          handleMissingApiKeyResponse(requestTab);
+          throw new Error(apiKeyUnavailableMessage);
+        }
+
+        throw new Error(apiError?.message ?? "请求 MiMo 接口失败，请稍后再试。");
       }
 
       const assistantMessage: Message = {
@@ -349,11 +511,7 @@ function App() {
         assistantMessage.appliedStyle = payload.appliedStyle;
       }
 
-      if (requestTab === "chat") {
-        setChatMessages((current) => [...current, assistantMessage]);
-      } else {
-        setSpeakMessages((current) => [...current, assistantMessage]);
-      }
+      appendAssistantMessage(requestTab, assistantMessage);
     } catch (caughtError) {
       const message = caughtError instanceof Error ? caughtError.message : "发生未知错误。";
       setError(message);
@@ -378,8 +536,147 @@ function App() {
     activeTab === "chat" ? "正在调用模型，请稍候…" : "正在调用模型并生成语音，请稍候…";
 
   return (
-    <main className="mx-auto min-h-screen w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    <>
+      {apiKeyDialogOpen && desktopConfig.enabled ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/35 px-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="api-key-dialog-title"
+            className="w-full max-w-lg rounded-[32px] border border-white/70 bg-card p-6 shadow-2xl"
+          >
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div className="space-y-2">
+                <Badge variant={apiKeyRestartRequired ? "accent" : "secondary"} className="gap-1.5 rounded-full px-3 py-1">
+                  {apiKeyRestartRequired ? <CheckCircle2 className="size-3.5" /> : <KeyRound className="size-3.5" />}
+                  {apiKeyRestartRequired ? "API Key 已保存" : "桌面版首次配置"}
+                </Badge>
+                <div>
+                  <h2 id="api-key-dialog-title" className="text-2xl font-semibold tracking-tight">
+                    {apiKeyRestartRequired ? "重启后即可开始使用" : "填写你的 MiMo API Key"}
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    {apiKeyRestartRequired
+                      ? "App 已经把 API Key 保存到本机配置文件。为了让内置服务加载新配置，需要重启一次。"
+                      : "这个 Key 只会保存在当前 Mac 的应用配置目录里，不会被打进 dmg。你也可以先关闭，稍后从应用内再次填写。"}
+                  </p>
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="rounded-full"
+                onClick={() => setApiKeyDialogOpen(false)}
+                aria-label="关闭 API Key 配置"
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+
+            {apiKeyRestartRequired ? (
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-accent/80 bg-accent/45 px-4 py-3 text-sm leading-6 text-accent-foreground">
+                  API Key 已保存。点击下方按钮后，App 会自动退出并重新打开，然后加载新填写的 Key。
+                </div>
+
+                {apiKeySaveError ? (
+                  <div className="rounded-2xl border border-destructive/20 bg-destructive/8 px-4 py-3 text-sm text-destructive">
+                    {apiKeySaveError}
+                  </div>
+                ) : null}
+
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button type="button" variant="outline" className="rounded-full" onClick={() => setApiKeyDialogOpen(false)}>
+                    稍后重启
+                  </Button>
+                  <Button type="button" className="rounded-full" onClick={handleRestartApp} disabled={isRestartingApp}>
+                    {isRestartingApp ? <LoaderCircle className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+                    重启 App
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <form className="space-y-4" onSubmit={handleSaveApiKey}>
+                <div className="space-y-2">
+                  <label htmlFor="desktop-api-key" className="text-sm font-medium">
+                    MIMO_API_KEY
+                  </label>
+                  <Input
+                    id="desktop-api-key"
+                    type="password"
+                    autoFocus
+                    value={apiKeyInput}
+                    onChange={(event) => setApiKeyInput(event.target.value)}
+                    placeholder="粘贴你的 Xiaomi MiMo API Key"
+                    className="h-12 rounded-2xl px-4"
+                  />
+                </div>
+
+                {apiKeySaveError ? (
+                  <div className="rounded-2xl border border-destructive/20 bg-destructive/8 px-4 py-3 text-sm text-destructive">
+                    {apiKeySaveError}
+                  </div>
+                ) : null}
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-xs leading-5 text-muted-foreground">
+                    保存后会提示重启；重启前当前会话不会加载新 Key。
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-full"
+                      onClick={() => setApiKeyDialogOpen(false)}
+                      disabled={isSavingApiKey}
+                    >
+                      稍后再说
+                    </Button>
+                    <Button type="submit" className="rounded-full" disabled={isSavingApiKey}>
+                      {isSavingApiKey ? <LoaderCircle className="size-4 animate-spin" /> : <KeyRound className="size-4" />}
+                      保存 API Key
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      <main className="mx-auto min-h-screen w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <section className="space-y-6">
+        {shouldShowApiKeyBanner ? (
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-[28px] border border-destructive/15 bg-card/85 px-5 py-4 shadow-sm">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="rounded-full bg-destructive/10 p-2 text-destructive">
+                <AlertTriangle className="size-5" />
+              </div>
+              <div className="space-y-1">
+                <p className="font-medium text-foreground">{apiKeyUnavailableMessage}</p>
+                <p className="text-sm leading-6 text-muted-foreground">
+                  你可以现在填写，或者稍后从这里再次打开配置入口。
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" className="rounded-full" onClick={openApiKeyDialog}>
+                <KeyRound className="size-4" />
+                填写 API Key
+              </Button>
+              {apiKeyRestartRequired ? (
+                <Button type="button" className="rounded-full" onClick={handleRestartApp} disabled={isRestartingApp}>
+                  {isRestartingApp ? <LoaderCircle className="size-4 animate-spin" /> : <RotateCcw className="size-4" />}
+                  重启 App
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
         <div className="space-y-5">
           <div className="flex flex-wrap items-center gap-3">
             <Badge variant="accent" className="rounded-full px-3 py-1 text-[11px] tracking-[0.24em] uppercase">
@@ -471,6 +768,8 @@ function App() {
                           className={
                             message.role === "user"
                               ? "ml-auto max-w-[92%] rounded-[28px] border border-primary/10 bg-secondary/80 p-5 shadow-sm"
+                              : message.isError
+                                ? "mr-auto max-w-[92%] rounded-[28px] border border-destructive/25 bg-destructive/8 p-5 shadow-sm"
                               : "mr-auto max-w-[92%] rounded-[28px] border border-primary/12 bg-gradient-to-br from-background to-accent/40 p-5 shadow-sm"
                           }
                         >
@@ -497,12 +796,44 @@ function App() {
                           </div>
 
                           {message.content ? (
-                            <p className="whitespace-pre-wrap text-[15px] leading-7 text-foreground">{message.content}</p>
+                            <p
+                              className={`whitespace-pre-wrap text-[15px] leading-7 ${
+                                message.isError ? "text-destructive" : "text-foreground"
+                              }`}
+                            >
+                              {message.content}
+                            </p>
                           ) : (
                             <p className="text-[15px] leading-7 text-muted-foreground">
                               本条消息未填写文字，模型已基于附件自动分析。
                             </p>
                           )}
+
+                          {message.isError && desktopConfig.enabled ? (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <Button type="button" size="sm" className="rounded-full" onClick={openApiKeyDialog}>
+                                <KeyRound className="size-4" />
+                                填写 API Key
+                              </Button>
+                              {apiKeyRestartRequired ? (
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="rounded-full"
+                                  onClick={handleRestartApp}
+                                  disabled={isRestartingApp}
+                                >
+                                  {isRestartingApp ? (
+                                    <LoaderCircle className="size-4 animate-spin" />
+                                  ) : (
+                                    <RotateCcw className="size-4" />
+                                  )}
+                                  重启 App
+                                </Button>
+                              ) : null}
+                            </div>
+                          ) : null}
 
                           {message.attachments && message.attachments.length > 0 ? (
                             <div className="mt-4 space-y-3">
@@ -816,7 +1147,8 @@ function App() {
           </CardContent>
         </Card>
       </section>
-    </main>
+      </main>
+    </>
   );
 }
 

@@ -19,6 +19,12 @@ import {
 
 type FetchLike = typeof fetch;
 
+type DesktopConfigController = {
+  hasApiKey: () => boolean | Promise<boolean>;
+  saveApiKey: (apiKey: string) => void | Promise<void>;
+  restartApp: () => void | Promise<void>;
+};
+
 type ChatSpeakBody = {
   message?: string;
   history?: HistoryMessage[];
@@ -282,10 +288,12 @@ function hasParsedRequestError(result: ParsedChatRequestResult): result is Extra
 
 export function createApp({
   apiKey = process.env.MIMO_API_KEY,
-  fetchFn = fetch
+  fetchFn = fetch,
+  desktopConfig
 }: {
   apiKey?: string;
   fetchFn?: FetchLike;
+  desktopConfig?: DesktopConfigController;
 } = {}) {
   const app = express();
   const projectRoot = getProjectRoot();
@@ -295,6 +303,55 @@ export function createApp({
 
   app.get("/api/health", (_request, response) => {
     response.json({ ok: true });
+  });
+
+  app.get("/api/desktop-config", async (_request, response) => {
+    const hasApiKey = desktopConfig ? await desktopConfig.hasApiKey() : Boolean(apiKey);
+
+    response.json({
+      enabled: Boolean(desktopConfig),
+      hasApiKey
+    });
+  });
+
+  app.post(
+    "/api/desktop-config/api-key",
+    async (request: Request<Record<string, never>, unknown, { apiKey?: string }>, response) => {
+      if (!desktopConfig) {
+        return sendError(response, 404, "DESKTOP_CONFIG_DISABLED", "Desktop API key configuration is not available.");
+      }
+
+      const nextApiKey = request.body?.apiKey?.trim();
+      if (!nextApiKey) {
+        return sendError(response, 400, "VALIDATION_ERROR", "MIMO_API_KEY is required.");
+      }
+
+      try {
+        await desktopConfig.saveApiKey(nextApiKey);
+
+        response.json({
+          ok: true,
+          hasApiKey: true,
+          restartRequired: true
+        });
+      } catch (error) {
+        console.error("Failed to save desktop API key:", error);
+        return sendError(response, 500, "CONFIG_WRITE_ERROR", "Unable to save MIMO_API_KEY.");
+      }
+    }
+  );
+
+  app.post("/api/desktop-config/restart", async (_request, response) => {
+    if (!desktopConfig) {
+      return sendError(response, 404, "DESKTOP_CONFIG_DISABLED", "Desktop restart is not available.");
+    }
+
+    response.json({ ok: true });
+    response.on("finish", () => {
+      setTimeout(() => {
+        void desktopConfig.restartApp();
+      }, 250);
+    });
   });
 
   app.post("/api/chat", async (request: Request<Record<string, never>, unknown, ChatSpeakBody>, response) => {

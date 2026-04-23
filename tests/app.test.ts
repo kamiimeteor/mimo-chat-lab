@@ -11,6 +11,71 @@ function createJsonResponse(body: unknown, status = 200) {
   });
 }
 
+describe("/api/desktop-config", () => {
+  it("reports disabled desktop configuration for the web server path", async () => {
+    const app = createApp({ apiKey: "test-key" });
+    const response = await request(app).get("/api/desktop-config");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      enabled: false,
+      hasApiKey: true
+    });
+  });
+
+  it("saves the desktop API key without echoing it back", async () => {
+    let savedApiKey = "";
+    const app = createApp({
+      apiKey: "",
+      desktopConfig: {
+        hasApiKey: () => Boolean(savedApiKey),
+        saveApiKey: (apiKey) => {
+          savedApiKey = apiKey;
+        },
+        restartApp: vi.fn()
+      }
+    });
+
+    const beforeResponse = await request(app).get("/api/desktop-config");
+    expect(beforeResponse.body).toEqual({
+      enabled: true,
+      hasApiKey: false
+    });
+
+    const saveResponse = await request(app).post("/api/desktop-config/api-key").send({
+      apiKey: "  test-desktop-key  "
+    });
+
+    expect(saveResponse.status).toBe(200);
+    expect(saveResponse.body).toEqual({
+      ok: true,
+      hasApiKey: true,
+      restartRequired: true
+    });
+    expect(saveResponse.text).not.toContain("test-desktop-key");
+    expect(savedApiKey).toBe("test-desktop-key");
+  });
+
+  it("triggers desktop restart after the response is sent", async () => {
+    const restartApp = vi.fn();
+    const app = createApp({
+      apiKey: "",
+      desktopConfig: {
+        hasApiKey: () => true,
+        saveApiKey: vi.fn(),
+        restartApp
+      }
+    });
+
+    const response = await request(app).post("/api/desktop-config/restart").send();
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ ok: true });
+
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(restartApp).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("/api/chat", () => {
   it("honors the selected MiMo-V2.5-Pro model for text-only chat", async () => {
     const fetchFn = vi.fn().mockResolvedValueOnce(

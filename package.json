@@ -1,12 +1,22 @@
 {
   "name": "mimo-v2-tts-testing",
+  "version": "0.1.0",
+  "description": "A local desktop lab for Xiaomi MiMo chat and voice workflows.",
+  "author": "ZHEJUN WANG",
   "private": true,
+  "packageManager": "pnpm@10.33.2",
   "type": "module",
+  "main": "electron/main.mjs",
   "scripts": {
     "dev": "concurrently -k \"pnpm dev:server\" \"pnpm dev:client\"",
     "dev:client": "vite",
     "dev:server": "tsx watch server/index.ts",
     "build": "vite build && tsc -p tsconfig.server.json",
+    "electron": "pnpm build && electron .",
+    "dist": "pnpm build && electron-builder",
+    "build:mac": "pnpm build && electron-builder --mac dmg",
+    "build:mac:unsigned": "pnpm build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg -c.mac.identity=null -c.mac.notarize=false",
+    "build:mac:universal": "pnpm build && electron-builder --mac dmg --universal",
     "preview": "vite preview",
     "start": "node dist-server/index.js",
     "test": "vitest run"
@@ -37,10 +47,58 @@
     "@types/supertest": "^6.0.3",
     "@vitejs/plugin-react": "^5.0.4",
     "concurrently": "^9.2.1",
+    "electron": "^41.3.0",
+    "electron-builder": "^26.8.1",
     "supertest": "^7.1.4",
     "tsx": "^4.20.6",
     "typescript": "^5.9.3",
     "vite": "^7.1.10",
     "vitest": "^3.2.4"
+  },
+  "build": {
+    "appId": "com.kamiiamazing.mimochatlab",
+    "productName": "Mimo Chat Lab",
+    "asar": true,
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "dist/**/*",
+      "dist-server/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "sign": false,
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    }
   }
 }

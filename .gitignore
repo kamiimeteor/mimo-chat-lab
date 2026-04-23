@@ -6,3 +6,4 @@ dist-server
 .firecrawl
 .playwright-cli
 output
+release
