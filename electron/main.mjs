@@ -1,11 +1,15 @@
 import { createServer } from "node:http";
-import "dotenv/config";
 import fs from "node:fs";
 import path from "node:path";
 import { app, BrowserWindow, Menu, dialog, shell } from "electron";
 import { createApp } from "../dist-server/app.js";
 
 const isDevelopment = !app.isPackaged;
+
+if (isDevelopment) {
+  const dotenv = await import("dotenv");
+  dotenv.config();
+}
 
 let mainWindow = null;
 let localServer = null;
