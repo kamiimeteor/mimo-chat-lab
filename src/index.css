@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: oklch(0.985 0.014 84.3);
+  --foreground: oklch(0.22 0.03 52.1);
+  --card: oklch(0.992 0.008 84.3);
+  --card-foreground: oklch(0.22 0.03 52.1);
+  --popover: oklch(0.992 0.008 84.3);
+  --popover-foreground: oklch(0.22 0.03 52.1);
+  --primary: oklch(0.61 0.17 41.8);
+  --primary-foreground: oklch(0.98 0.02 80.3);
+  --secondary: oklch(0.96 0.02 83.1);
+  --secondary-foreground: oklch(0.33 0.04 45.8);
+  --muted: oklch(0.955 0.016 84.2);
+  --muted-foreground: oklch(0.51 0.03 53.1);
+  --accent: oklch(0.93 0.04 72.8);
+  --accent-foreground: oklch(0.32 0.04 46.3);
+  --destructive: oklch(0.61 0.22 27.4);
+  --destructive-foreground: oklch(0.98 0.01 17.2);
+  --border: oklch(0.89 0.018 76.3);
+  --input: oklch(0.89 0.018 76.3);
+  --ring: oklch(0.61 0.17 41.8);
+  --radius: 1rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground min-h-screen antialiased;
+    font-family:
+      "Inter",
+      "Noto Sans SC",
+      ui-sans-serif,
+      system-ui,
+      sans-serif;
+    background-image:
+      radial-gradient(circle at top left, rgba(255, 255, 255, 0.94), transparent 28%),
+      radial-gradient(circle at 85% 15%, rgba(222, 179, 126, 0.24), transparent 24%),
+      linear-gradient(180deg, rgba(250, 244, 235, 0.98), rgba(247, 239, 226, 0.94));
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(255, 250, 244, 0.78));
+    box-shadow:
+      0 14px 36px rgba(66, 34, 12, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  }
+}
