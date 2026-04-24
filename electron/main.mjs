@@ -1,10 +1,12 @@
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 import { app, BrowserWindow, Menu, dialog, shell } from "electron";
-import { createApp } from "../dist-server/app.js";
 
 const isDevelopment = !app.isPackaged;
+const require = createRequire(import.meta.url);
+const { createApp } = require("../dist-server/app.cjs");
 
 if (isDevelopment) {
   const dotenv = await import("dotenv");

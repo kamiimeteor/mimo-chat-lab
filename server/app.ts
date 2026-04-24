@@ -1,7 +1,6 @@
 import express, { type Request, type Response } from "express";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   AUDIO_MIME_TYPE,
   MAX_BASE64_MEDIA_BYTES,
@@ -73,8 +72,9 @@ type ParsedChatRequestResult =
     };
 
 function getProjectRoot() {
-  const currentFile = fileURLToPath(import.meta.url);
-  return path.resolve(path.dirname(currentFile), "..");
+  const currentDir = typeof __dirname !== "undefined" ? __dirname : path.join(process.cwd(), "server");
+
+  return path.resolve(currentDir, "..");
 }
 
 function sendError(response: Response, status: number, code: string, message: string) {

@@ -12,14 +12,14 @@
     "dev:client": "vite",
     "dev:server": "tsx watch server/index.ts",
     "build": "vite build && pnpm build:server",
-    "build:server": "rm -rf dist-server && esbuild server/app.ts server/index.ts --bundle --platform=node --format=esm --target=node22 --outdir=dist-server --sourcemap",
+    "build:server": "rm -rf dist-server && esbuild server/app.ts server/index.ts --bundle --platform=node --format=cjs --target=node22 --outdir=dist-server --out-extension:.js=.cjs --sourcemap",
     "electron": "pnpm build && electron .",
     "dist": "pnpm build && electron-builder",
     "build:mac": "pnpm build && electron-builder --mac dmg",
     "build:mac:unsigned": "pnpm build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg -c.mac.identity=null -c.mac.notarize=false",
     "build:mac:universal": "pnpm build && electron-builder --mac dmg --universal",
     "preview": "vite preview",
-    "start": "node dist-server/index.js",
+    "start": "node dist-server/index.cjs",
     "test": "vitest run"
   },
   "dependencies": {
